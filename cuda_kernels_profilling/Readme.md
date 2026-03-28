@@ -1,0 +1,6 @@
+| Kernel           | Problem Size   | Achieved Bandwidth / GFLOPS | Theoretical Peak | Arithmetic Intensity (FLOPs/byte) | NCU Occupancy % | Top Warp Stall Reason                | Speedup vs Baseline |
+| ---------------- | -------------- | --------------------------- | ---------------- | --------------------------------- | --------------- | ------------------------------------ | ------------------- |
+| **SAXPY**        | N = 16,777,216 | 653 GB/s                    | ~360–700 GB/s    | 0.167                             | 20–30%          | Memory dependency / DRAM throttling  | N/A                 |
+| **MatMul Naive** | N = 512 × 512  | 478 GFLOPS                  | ~500–600 GFLOPS  | 85                                | 50–60%          | Memory dependency                    | 1×                  |
+| **MatMul Tiled** | N = 512 × 512  | 2,617 GFLOPS                | ~500–600 GFLOPS  | 85                                | 60–70%          | Shared memory / execution dependency | 5.47×               |
+| **Softmax**      | N = 16,777,216 | 120 GB/s                    | ~360–700 GB/s    | 0.25                              | 15–25%          | Synchronization / warp divergence    | N/A                 |
