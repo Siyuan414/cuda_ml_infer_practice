@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flash-attn-triton"
+version = "0.1.0"
+description = "A minimal, pedagogical FlashAttention-2 forward kernel written in Triton."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "siyuan" }]
+dependencies = [
+    "torch>=2.1",
+    "triton>=2.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["flash_attn_triton*"]
+exclude = ["tests*", "benchmark*"]
