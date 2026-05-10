@@ -1,0 +1,10 @@
+# Pip requirements for the modelopt_env venv.
+# PyTorch should be installed FIRST from the cu128 index:
+#     pip install --index-url https://download.pytorch.org/whl/cu128 torch torchvision torchaudio
+# THEN install the rest:
+#     pip install -r requirements-modelopt.txt
+
+nvidia-modelopt[hf,torch]
+datasets
+sentencepiece
+protobuf

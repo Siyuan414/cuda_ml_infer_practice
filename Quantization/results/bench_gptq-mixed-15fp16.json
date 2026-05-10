@@ -1,0 +1,20 @@
+{
+  "checkpoint": "./tinyllama-1.1b-gptq-mixed-15fp16",
+  "label": "gptq-mixed-15fp16",
+  "max_new_tokens": 128,
+  "disk_size_mb": 954.1060056686401,
+  "vram_allocated_mb": 965.77197265625,
+  "prompt_tokens": 41,
+  "generated_tokens": 122,
+  "mean_seconds": 1.8524475189999976,
+  "median_seconds": 1.8506012910002028,
+  "tokens_per_sec_mean": 65.85881583617493,
+  "tokens_per_sec_median": 65.92451901622857,
+  "all_runs_seconds": [
+    1.8646338999999443,
+    1.845966460999989,
+    1.8506012910002028,
+    1.846064831999911,
+    1.8549711109999407
+  ]
+}

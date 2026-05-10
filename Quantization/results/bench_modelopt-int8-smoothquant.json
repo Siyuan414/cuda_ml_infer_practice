@@ -1,0 +1,22 @@
+{
+  "label": "modelopt-int8-smoothquant",
+  "checkpoint": "modelopt-int8-smoothquant",
+  "prompt_tokens": 41,
+  "generated_tokens": 87,
+  "max_new_tokens": 128,
+  "mean_seconds": 2.5703498360000596,
+  "median_seconds": 2.5671000040001672,
+  "tokens_per_sec_mean": 33.84753265158182,
+  "tokens_per_sec_median": 33.89038209046504,
+  "all_runs_seconds": [
+    2.586878259000514,
+    2.572020206000161,
+    2.5671000040001672,
+    2.560349594999934,
+    2.5654011159995207
+  ],
+  "disk_size_mb": null,
+  "vram_allocated_mb": 2110.892578125,
+  "ppl": 8.76272740885727,
+  "delta_pct": 12.343100337480111
+}

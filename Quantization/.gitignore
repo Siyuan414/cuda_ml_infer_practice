@@ -1,0 +1,41 @@
+# local-only "junk drawer" — old logs, leftover .deb files, superseded drafts.
+# We keep them locally for reference but they don't belong in the repo.
+.archive/
+
+# early QuantDebugger prototype — superseded by top-level quant_debugger.py
+quantization_debugger/
+
+# venvs (recreate via setup_*_env.sh)
+gptq_env/
+modelopt_env/
+quant_env/
+venv/
+.venv/
+
+# quantized model checkpoints — large, regenerable from quant scripts
+tinyllama-*/
+*.safetensors
+*.bin
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# huggingface caches (if user accidentally points HF_HOME at the repo)
+.cache/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# logs
+*.log
+nohup.out

@@ -1,0 +1,15 @@
+# Pip requirements for the gptq_env venv.
+# PyTorch should be installed FIRST from the cu128 index:
+#     pip install --index-url https://download.pytorch.org/whl/cu128 torch torchvision torchaudio
+# THEN install the rest:
+#     pip install -r requirements-gptq.txt
+
+gptqmodel>=7.0.0
+autoawq>=0.2.5
+transformers>=5.4.0
+accelerate>=0.34
+datasets>=3.0
+safetensors
+sentencepiece
+protobuf
+huggingface_hub

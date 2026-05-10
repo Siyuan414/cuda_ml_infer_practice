@@ -1,0 +1,20 @@
+{
+  "checkpoint": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+  "label": "fp16-baseline",
+  "max_new_tokens": 128,
+  "disk_size_mb": null,
+  "vram_allocated_mb": 2108.30126953125,
+  "prompt_tokens": 41,
+  "generated_tokens": 120,
+  "mean_seconds": 0.8976785059999883,
+  "median_seconds": 0.8915822159999607,
+  "tokens_per_sec_mean": 133.67814779782816,
+  "tokens_per_sec_median": 134.59218661670266,
+  "all_runs_seconds": [
+    0.9232902219999914,
+    0.8915822159999607,
+    0.8918183010000575,
+    0.8906597819999433,
+    0.8910420089999889
+  ]
+}

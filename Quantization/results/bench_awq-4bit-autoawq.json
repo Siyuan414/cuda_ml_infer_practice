@@ -1,0 +1,20 @@
+{
+  "checkpoint": "./tinyllama-1.1b-awq-4bit",
+  "label": "awq-4bit-autoawq",
+  "max_new_tokens": 128,
+  "disk_size_mb": 733.7364177703857,
+  "vram_allocated_mb": 746.3486328125,
+  "prompt_tokens": 41,
+  "generated_tokens": 128,
+  "mean_seconds": 2.090369128200109,
+  "median_seconds": 2.0934294389999195,
+  "tokens_per_sec_mean": 61.23320435286618,
+  "tokens_per_sec_median": 61.14368968707568,
+  "all_runs_seconds": [
+    2.0847741970001152,
+    2.0934294389999195,
+    2.0986007980000068,
+    2.0945914009998887,
+    2.0804498060006154
+  ]
+}

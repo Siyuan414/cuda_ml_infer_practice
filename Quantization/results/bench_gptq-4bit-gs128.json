@@ -1,0 +1,20 @@
+{
+  "checkpoint": "./tinyllama-1.1b-gptq-4bit",
+  "label": "gptq-4bit-gs128",
+  "max_new_tokens": 128,
+  "disk_size_mb": 789.3988332748413,
+  "vram_allocated_mb": 803.068359375,
+  "prompt_tokens": 41,
+  "generated_tokens": 73,
+  "mean_seconds": 1.2080896682000002,
+  "median_seconds": 1.2078937960000076,
+  "tokens_per_sec_mean": 60.425978237829604,
+  "tokens_per_sec_median": 60.435776921565996,
+  "all_runs_seconds": [
+    1.2305391069999132,
+    1.2078937960000076,
+    1.2173123299999133,
+    1.1857338940001227,
+    1.1989692140000443
+  ]
+}

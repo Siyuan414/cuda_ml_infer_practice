@@ -1,0 +1,22 @@
+{
+  "label": "modelopt-int4-awq",
+  "checkpoint": "modelopt-int4-awq",
+  "prompt_tokens": 41,
+  "generated_tokens": 81,
+  "max_new_tokens": 128,
+  "mean_seconds": 2.180682878399966,
+  "median_seconds": 2.17408368300039,
+  "tokens_per_sec_mean": 37.14432795447644,
+  "tokens_per_sec_median": 37.25707553639989,
+  "all_runs_seconds": [
+    2.21391168899936,
+    2.17408368300039,
+    2.1485406270003296,
+    2.2202862929998446,
+    2.146592099999907
+  ],
+  "disk_size_mb": null,
+  "vram_allocated_mb": 2138.1884765625,
+  "ppl": 8.276423041183028,
+  "delta_pct": 6.108404469049949
+}
