@@ -129,8 +129,16 @@ add_executable(llama_trt_builder llama_trt_builder.cpp)
 target_link_libraries(llama_trt_builder nvinfer nvonnxparser cudart)
 
 # ── LLaMA attention TRT inferencer ───────────────────────────────────────────
+# NVTX3 in CUDA 12+ is header-only — no link needed
 add_executable(llama_trt_infer llama_trt_infer.cpp)
 target_link_libraries(llama_trt_infer nvinfer cudart)
+
+# ── LLaMA attention INT8 builder (Day 27) ────────────────────────────────────
+# Builds a calibrated INT8 engine using IInt8EntropyCalibrator2.
+# Run from trt_resnet18/ so it can find llama_attn_dynamic.onnx and
+# llama_attn_fp16.trt for the accuracy comparison.
+add_executable(llama_int8_builder llama_int8_builder.cpp)
+target_link_libraries(llama_int8_builder nvinfer nvonnxparser cudart)
 
 # ── Build info ─────────────────────────────────────────────────────────────────
 message(STATUS "")
