@@ -1,0 +1,50 @@
+# ── Build artifacts ───────────────────────────────────────────────────────────
+build/
+*.o
+*.a
+*.so
+
+# ── TensorRT serialized engines ───────────────────────────────────────────────
+*.trt
+*.engine
+*.plan
+
+# ── ONNX model files (often large; regenerate with export scripts) ─────────────
+*.onnx
+*.onnx.data
+
+# ── Binary data files ─────────────────────────────────────────────────────────
+*.bin
+
+# ── Nsight profiling output ───────────────────────────────────────────────────
+*.nsys-rep
+*.sqlite
+*.csv
+nsys_*.log
+
+# ── Python virtual environment ────────────────────────────────────────────────
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+*.egg
+
+# ── Generated protobuf C++ files (regenerate with protoc) ─────────────────────
+# Uncomment if you prefer to regenerate from onnx.proto rather than commit:
+# onnx_proto/onnx.pb.h
+# onnx_proto/onnx.pb.cc
+
+# ── IDE / editor ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
