@@ -1,0 +1,19 @@
+# Large generated artifacts — reproduce via tools/export_onnx.py + tools/build_engine.py
+onnx/
+engine/
+*.trt
+*.onnx
+*.onnx_data
+*.bin
+*.gguf
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# C++ build
+build/
+
+# Logs
+*.log
