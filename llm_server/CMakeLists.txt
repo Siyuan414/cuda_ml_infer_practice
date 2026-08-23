@@ -36,6 +36,20 @@ target_link_libraries(runtime
     CUDA::cublas
 )
 
+# ── batch_runtime: continuous batching (Stage 2A) ────────────────────────────
+add_executable(batch_runtime
+    src/batch_runtime.cpp
+)
+set_source_files_properties(src/batch_runtime.cpp PROPERTIES LANGUAGE CUDA)
+target_include_directories(batch_runtime PRIVATE ${TRT_INC_DIR}
+    ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/kernels)
+target_link_directories(batch_runtime PRIVATE ${TRT_LIB_DIR})
+target_link_libraries(batch_runtime
+    nvinfer
+    CUDA::cudart
+    CUDA::cublas
+)
+
 # Future targets (uncomment as stages progress):
 # add_executable(engine_builder tools/engine_builder.cpp)   # S1.1
 # add_executable(bench tools/bench.cpp)                     # S1.6

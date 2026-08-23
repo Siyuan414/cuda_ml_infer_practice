@@ -67,22 +67,23 @@ def main():
     for name, t in inputs.items():
         print(f"  {name:45s} {t.shape}")
 
-    def kv_shape(past):
-        return (1, NUM_KV_HEADS, past, HEAD_DIM)
+    def kv_shape(batch,past):
+        return (batch, NUM_KV_HEADS, past, HEAD_DIM)
 
     def make_profile(seq_rng, past_rng):
         """seq_rng/past_rng: (min, opt, max)"""
         prof = builder.create_optimization_profile()
+        batch_rng = (1,4,32)
         for name in inputs:
             if name == "input_ids" or name == "position_ids":
-                prof.set_shape(name, (1, seq_rng[0]), (1, seq_rng[1]), (1, seq_rng[2]))
+                prof.set_shape(name, (batch_rng[0], seq_rng[0]), (batch_rng[1], seq_rng[1]), (batch_rng[2], seq_rng[2]))
             elif name == "attention_mask":
                 # mask covers past + current: total = past_len + seq_len
                 tot = tuple(p + s for p, s in zip(past_rng, seq_rng))
-                prof.set_shape(name, (1, tot[0]), (1, tot[1]), (1, tot[2]))
+                prof.set_shape(name, (batch_rng[0], tot[0]), (batch_rng[1], tot[1]), (batch_rng[2], tot[2]))
             elif name.startswith("past_key_values"):
-                prof.set_shape(name, kv_shape(past_rng[0]),
-                               kv_shape(past_rng[1]), kv_shape(past_rng[2]))
+                prof.set_shape(name, kv_shape(batch_rng[0], past_rng[0]),
+                               kv_shape(batch_rng[1], past_rng[1]), kv_shape(batch_rng[2], past_rng[2]))
             else:
                 raise SystemExit(f"Unhandled input: {name}")
         config.add_optimization_profile(prof)

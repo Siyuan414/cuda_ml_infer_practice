@@ -36,21 +36,29 @@ def alloc(nbytes):
     (ptr,) = check(cudart.cudaMalloc(nbytes))
     return ptr
 
+def run_phase(engine, profile, lens, seq, tokens, kv_data, poison=1e4):
+    """
+    lens    : real cached length per slot, e.g. [500, 30, 200, 1]
+    seq     : new tokens per slot this step (1 for decode)
+    tokens  : [B, seq] int64 — the new token ids
+    kv_data : list of B arrays, kv_data[i] is [H, lens[i], D] fp16 — real KV
+    poison  : value written into the dead padding region
+    returns : hidden states [B, seq, HIDDEN]
+    """
+    B    = len(lens)
+    past = max(lens)
+    total = past + seq
+    print(f"\n── profile {profile}: B={B} lens={lens} past={past} seq={seq} ──")
 
-def run_phase(engine, profile, seq, past):
-    print(f"\n── profile {profile}: seq={seq} past={past} ──")
     ctx = engine.create_execution_context()
     (stream,) = check(cudart.cudaStreamCreate())
     ctx.set_optimization_profile_async(profile, stream)
     check(cudart.cudaStreamSynchronize(stream))
 
-    total = past + seq
     buffers = {}
 
     def upload(name, arr):
         arr = np.ascontiguousarray(arr)
-        # cudaMalloc(0) returns nullptr and TRT rejects null addresses —
-        # always allocate at least 2 bytes (dummy for past_len=0 KV inputs)
         ptr = alloc(max(arr.nbytes, 2))
         if arr.nbytes:
             check(cudart.cudaMemcpy(ptr, arr.ctypes.data, arr.nbytes,
@@ -59,24 +67,36 @@ def run_phase(engine, profile, seq, past):
         ctx.set_input_shape(name, arr.shape)
         ctx.set_tensor_address(name, ptr)
 
-    upload("input_ids", np.random.randint(0, 128000, (1, seq), dtype=np.int64))
-    upload("position_ids", np.arange(past, past + seq, dtype=np.int64)[None, :])
-    upload("attention_mask", np.ones((1, total), dtype=np.int64))
-    kv = np.zeros((1, NUM_KV_HEADS, past, HEAD_DIM), dtype=np.float16)
+    # Row i's new token sits at its OWN next position, not at `past`.
+    pos = np.array([np.arange(l, l + seq) for l in lens], dtype=np.int64)
+
+    # real tokens | dead padding | new token(s).  TRT appends new KV at index
+    # `past`, so the new columns are always the last `seq`.
+    mask = np.zeros((B, total), dtype=np.int64)
+    for i, l in enumerate(lens):
+        mask[i, :l]    = 1
+        mask[i, past:] = 1
+
+    # Poison the padding so a masking failure blows up instead of drifting.
+    kv = np.full((B, NUM_KV_HEADS, past, HEAD_DIM), poison, dtype=np.float16)
+    for i, l in enumerate(lens):
+        if l:
+            kv[i, :, :l, :] = kv_data[i]
+
+    upload("input_ids",      tokens.astype(np.int64))
+    upload("position_ids",   pos)
+    upload("attention_mask", mask)
     for i in range(NUM_LAYERS):
-        upload(f"past_key_values.{i}.key", kv)
+        upload(f"past_key_values.{i}.key",   kv)
         upload(f"past_key_values.{i}.value", kv)
 
-    # Outputs
-    out_ptrs = {}
-    hidden_name = None
+    out_ptrs, hidden_name = {}, None
     for i in range(engine.num_io_tensors):
         name = engine.get_tensor_name(i)
         if engine.get_tensor_mode(name) != trt.TensorIOMode.OUTPUT:
             continue
         shape = tuple(ctx.get_tensor_shape(name))
-        nbytes = int(np.prod(shape)) * 2  # fp16
-        ptr = alloc(max(nbytes, 2))
+        ptr = alloc(max(int(np.prod(shape)) * 2, 2))
         out_ptrs[name] = (ptr, shape)
         ctx.set_tensor_address(name, ptr)
         if "present" not in name:
@@ -89,15 +109,13 @@ def run_phase(engine, profile, seq, past):
     host = np.empty(shape, dtype=np.float16)
     check(cudart.cudaMemcpy(host.ctypes.data, ptr, host.nbytes,
                             cudart.cudaMemcpyKind.cudaMemcpyDeviceToHost))
-    ok = np.isfinite(host.astype(np.float32)).all()
-    print(f"  hidden '{hidden_name}' shape={shape}  finite={ok}  "
-          f"mean|x|={np.abs(host.astype(np.float32)).mean():.4f}")
 
-    for ptr in list(buffers.values()) + [p for p, _ in out_ptrs.values()]:
-        cudart.cudaFree(ptr)
+    for p in list(buffers.values()) + [p for p, _ in out_ptrs.values()]:
+        cudart.cudaFree(p)
     cudart.cudaStreamDestroy(stream)
-    if not ok:
-        raise SystemExit("  NaN/Inf in output — FAIL")
+
+    print(f"  hidden {shape}  finite={np.isfinite(host.astype(np.float32)).all()}")
+    return host
 
 
 def main():
@@ -106,10 +124,46 @@ def main():
     engine = runtime.deserialize_cuda_engine(ENGINE.read_bytes())
     print(f"Engine: {ENGINE.name}  profiles={engine.num_optimization_profiles}")
 
-    run_phase(engine, profile=0, seq=128, past=0)   # prefill
-    run_phase(engine, profile=1, seq=1, past=512)   # decode
+    lens = [500, 30, 200, 1]
+    rng  = np.random.default_rng(0)
+    kv_all = [(rng.standard_normal((NUM_KV_HEADS, l, HEAD_DIM)) * 0.1).astype(np.float16)
+              for l in lens]
+    tok = rng.integers(0, 128000, (len(lens), 1), dtype=np.int64)
 
-    print("\nSMOKE TEST PASSED — both profiles execute.")
+    # 1. prefill still works (past must be 0 → profile 0)
+    run_phase(engine, 0, [0, 0, 0, 0], 128,
+              rng.integers(0, 128000, (4, 128), dtype=np.int64), [None]*4)
+
+    # 2. ragged batched decode
+    h_batch = run_phase(engine, 1, lens, 1, tok, kv_all)
+
+    # 3. invariance A — slot 1 alone, no padding at all
+    h_alone = run_phase(engine, 1, [lens[1]], 1, tok[1:2], [kv_all[1]])
+    diff = np.abs(h_batch[1].astype(np.float32) - h_alone[0].astype(np.float32)).max()
+    print(f"\nA. slot1 batched vs alone : max|diff| = {diff:.5f}")
+
+    # 4. invariance B — same batch, opposite poison; must be unchanged
+    h_flip = run_phase(engine, 1, lens, 1, tok, kv_all, poison=-1e4)
+    diff2 = np.abs(h_batch[1].astype(np.float32) - h_flip[1].astype(np.float32)).max()
+    print(f"B. slot1 poison +1e4 vs -1e4: max|diff| = {diff2:.5f}")
+
+    ok = diff < 5e-2 and diff2 == 0.0
+    print("\n" + ("PASSED — padding is correctly masked"
+                  if ok else "FAILED — masked positions are leaking into the output"))
+    
+    # C. same batch size, same slot-1 data, but no padding anywhere
+    lens_c = [30, 30, 30, 30]
+    kv_c   = [kv_all[1]] * 4          # slot 1's data in every slot
+    h_nopad = run_phase(engine, 1, lens_c, 1, tok, kv_c)
+    diff3 = np.abs(h_batch[1].astype(np.float32) - h_nopad[1].astype(np.float32)).max()
+    print(f"C. slot1 past=500 vs past=30 : max|diff| = {diff3:.5f}")
+
+
+    print(np.abs(h_alone[0].astype(np.float32) - h_nopad[1].astype(np.float32)).max())  # expect ~0
+    print(np.abs(h_batch[1].astype(np.float32)).max())                                   # signal scale
+
+    return 0 if ok else 1
+    
 
 
 if __name__ == "__main__":
