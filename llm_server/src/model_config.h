@@ -32,6 +32,9 @@ struct ModelConfig {
     int head_dim     = 0;
     int vocab_size   = 0;
     int max_pos      = 0;   // model's trained context length
+    int inter_dim    = 0;   // MLP intermediate size (S2.7)
+    float rms_eps    = 1e-5f;
+    float rope_theta = 500000.f;   // LLaMA-3.2; older LLaMA used 10000
 
     // max_seq: what we actually allocate. Clamped to the model's max_pos.
     int max_seq      = 0;
@@ -48,6 +51,9 @@ struct ModelConfig {
         num_kv_heads = get_int(src, "num_key_value_heads", num_q_heads); // MHA fallback
         vocab_size   = get_int(src, "vocab_size");
         max_pos      = get_int(src, "max_position_embeddings", 0);
+        inter_dim    = get_int(src, "intermediate_size", 0);
+        rms_eps      = get_float(src, "rms_norm_eps", 1e-5f);
+        rope_theta   = get_float(src, "rope_theta", 500000.f);
 
         int cfg_head_dim = get_int(src, "head_dim", 0);
         head_dim = cfg_head_dim > 0 ? cfg_head_dim
@@ -68,6 +74,20 @@ struct ModelConfig {
     }
 
 private:
+    // Same scan as get_int but parses a float (rms_norm_eps is 1e-5, rope_theta
+    // can be written as 500000.0).
+    static float get_float(const std::string& s, const std::string& key,
+                           float def) {
+        const std::string pat = "\"" + key + "\"";
+        size_t p = s.find(pat);
+        if (p == std::string::npos) return def;
+        p = s.find(':', p + pat.size());
+        if (p == std::string::npos) return def;
+        ++p;
+        while (p < s.size() && std::isspace(static_cast<unsigned char>(s[p]))) ++p;
+        try { return std::stof(s.substr(p)); } catch (...) { return def; }
+    }
+
     // Finds "key" then the next number after the following ':'.
     static int get_int(const std::string& s, const std::string& key, int def = -1) {
         const std::string pat = "\"" + key + "\"";

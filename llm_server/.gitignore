@@ -1,6 +1,9 @@
-# Large generated artifacts — reproduce via tools/export_onnx.py + tools/build_engine.py
+# Large generated artifacts — reproduce via the tools/ scripts
 onnx/
 engine/
+weights/
+reference/
+prompts.txt
 *.trt
 *.onnx
 *.onnx_data
