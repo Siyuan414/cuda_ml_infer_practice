@@ -50,6 +50,31 @@ target_link_libraries(batch_runtime
     CUDA::cublas
 )
 
+# ── paged_runtime: continuous batching on the paged cache (Stage 2B) ─────────
+# No TensorRT: the forward pass is decode_layer.h + our kernels.
+add_executable(paged_runtime
+    src/paged_runtime.cpp
+)
+set_source_files_properties(src/paged_runtime.cpp PROPERTIES LANGUAGE CUDA)
+target_compile_options(paged_runtime PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda>)
+target_include_directories(paged_runtime PRIVATE
+    ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/kernels)
+target_link_libraries(paged_runtime CUDA::cudart CUDA::cublas)
+
+# ── serve: HTTP front-end over the paged engine (Stage 2, S2.4) ──────────────
+add_executable(serve
+    src/serve.cpp
+)
+set_source_files_properties(src/serve.cpp PROPERTIES LANGUAGE CUDA)
+target_compile_options(serve PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda>)
+target_include_directories(serve PRIVATE
+    ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/kernels)
+target_link_libraries(serve CUDA::cudart CUDA::cublas)
+find_package(Threads REQUIRED)
+target_link_libraries(serve Threads::Threads)
+
 # Future targets (uncomment as stages progress):
 # add_executable(engine_builder tools/engine_builder.cpp)   # S1.1
 # add_executable(bench tools/bench.cpp)                     # S1.6

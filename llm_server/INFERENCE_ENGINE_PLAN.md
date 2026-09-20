@@ -115,16 +115,38 @@ reproducibility, a real property of every batched server (vLLM included), not co
   batch-composition drift), throughput vs batch size, TTFT/TPOT under load, slot
   occupancy → `STAGE2.md`.
 
-### Stage 2B — Paged KV + custom attention
+### Stage 2B — Paged KV + custom decode path ✅ COMPLETE
 
-- **S2.6** Block allocator — fixed-size blocks (e.g. 16 tokens), free list, per-sequence
-  block table.
-- **S2.7** Split the ONNX graph so attention is ours: the engine keeps QKV projections and
-  the MLP; a custom CUDA kernel does attention, reading KV through the block table.
-- **S2.8** Paged attention kernel — the flash-attention work from `../Triton` is the
-  starting point; the new part is block-table indirection.
-- **S2.9** Verify against 2A (same outputs) and measure: memory per request, max
-  concurrency at fixed VRAM, throughput vs 2A.
+→ [benchmarks/STAGE2B.md](benchmarks/STAGE2B.md)
+
+| | Delivered |
+|---|---|
+| S2.6 | `BlockAllocator` — 16-token blocks, free list, block tables, no CUDA, 10 tests |
+| S2.7 | Custom CUDA decode path instead of a TRT plugin: RMSNorm/RoPE/SiLU-mul/embedding kernels + 7 cuBLAS GEMMs per layer, verified layer-by-layer vs HF |
+| S2.8 | Paged attention kernel — block-table indirection, 3 invariance tests, block-major restructure after profiling |
+| S2.9 | `paged_runtime` — preemption (newest-first, recompute), KV budget sweep |
+
+**Results:** 15,090 tok/s (**15.9×** Stage 2A's 947), TTFT p50 524 → 83 ms,
+128 concurrent requests in 512 MB. KV utilization 86% vs 11%.
+
+**Why a custom decode path rather than a TRT plugin (S2.7):** replacing attention
+inside the engine needs ONNX graph surgery plus `IPluginV3` — a fiddly,
+version-fragile API where a bug looks like a TRT error rather than a math error.
+Writing the forward pass directly means everything is unit-testable and verifiable
+against HF layer by layer. Cost: ~16% slower per step at equal batch (no kernel
+fusion), which is what buys the ability to page.
+
+**Findings worth carrying forward:**
+
+- Paged attention is at **parity per call**, not faster — indirection costs about
+  what the reduced scanning saves. The win is 8–40× memory. (Matches vLLM.)
+- The naive Phase-3 loop was **2.3× slower** than the kernel it replaced, from
+  per-token integer division; block-major iteration fixed it. Only the benchmark
+  revealed this.
+- **Raw throughput overstates under preemption** — at 64 MB, 32% of generated
+  tokens were recompute. Goodput is the honest metric.
+- Prefill and decode are the **same operation** in this path (no admission stall),
+  at the cost of P steps for a P-token prompt. Chunked prefill is the fix.
 
 ## Stage 3 — Speculative decoding (2–3 weeks)
 

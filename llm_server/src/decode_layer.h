@@ -200,21 +200,23 @@ inline void forward_decode(const ModelConfig& cfg, const Weights& weights,
                            __half* k_pool, __half* v_pool,
                            const int* d_block_table, const int* d_lens,
                            const int* d_positions,
-                           int B, int block_size, int max_blocks, int max_len,
+                           int B, int block_size,
+                           int num_blocks,    // TOTAL blocks in the pool
+                           int max_blocks,    // block-table WIDTH (per sequence)
+                           int max_len,
                            cudaStream_t stream) {
-    // TODO
-    //  - launch_embedding(weights.embed_tokens, d_token_ids, x, B, hidden, ...)
-    //  - for each layer: forward_layer(...)
-    //  - launch_rmsnorm(x, weights.final_norm, s.h, B, hidden, eps, stream)
-    //  - gemm(blas, weights.lm_head, s.h, logits, vocab, hidden, B)
-    //
-    //  NOTE: k_pool/v_pool need a per-LAYER offset. One pool sized
-    //  [num_layers, num_blocks, Hkv, BS, D] and pass
-    //      k_pool + (size_t)layer * num_blocks * Hkv * BS * D
+    // The pool is [num_layers, num_blocks, Hkv, BS, D], so the per-layer stride
+    // uses num_blocks — NOT max_blocks, which is only how many blocks one
+    // sequence may own. They are equal in the single-sequence verify harness
+    // and very different in the server (thousands vs ~128), so mixing them up
+    // silently reads the wrong pool region for every layer past 0.
+    const size_t pool_per_layer = (size_t)num_blocks * cfg.num_kv_heads
+                                * block_size * cfg.head_dim;
+
     launch_embedding(weights.embed_tokens, d_token_ids, x, B, cfg.hidden_dim, stream);
     for (int layer = 0; layer < cfg.num_layers; ++layer) {
         const LayerWeights& w = weights.layers[layer];
-        const size_t layer_offset = (size_t)layer * max_blocks * cfg.num_kv_heads * block_size * cfg.head_dim;
+        const size_t layer_offset = (size_t)layer * pool_per_layer;
         forward_layer(cfg, w, blas, s, x,
                       k_pool + layer_offset, v_pool + layer_offset,
                       d_block_table, d_lens, d_positions,

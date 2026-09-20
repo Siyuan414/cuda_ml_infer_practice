@@ -135,6 +135,8 @@ int main(int argc, char** argv) {
                           v_pool + (size_t)l * pool_per_layer,
                           d_table, d_lens, d_pos,
                           /*B=*/1, BS, max_blocks, /*max_len=*/t + 1, 0);
+            // (num_blocks == max_blocks here, which is why the pool-offset bug
+            //  in forward_decode did not show up until paged_runtime.)
             if (t == N - 1) {
                 CK(cudaDeviceSynchronize());
                 ours[l] = download(x, H);       // snapshot after this layer

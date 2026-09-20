@@ -13,12 +13,22 @@ breakdown.
       41k tok/s prefill, 235 tok/s decode, verified against HF (cosine 1.0000, 5/5 top-1)
 - [x] **Stage 2A** — Continuous batching → [benchmarks/STAGE2.md](benchmarks/STAGE2.md)
       947 tok/s peak (5.2× over single-request), 24/24 outputs identical to sequential
-- [x] **Stage 2B** — Paged KV + custom decode path (no TensorRT)
-      Block allocator (86% vs 11% KV utilization), paged attention kernel,
-      hand-written forward pass verified layer-by-layer against HF (rel err ~0.005)
-- [ ] Stage 2B.9 — Wire paged path into the scheduler; measure concurrency at fixed VRAM
+- [x] **Stage 2B** — Paged KV + custom decode path → [benchmarks/STAGE2B.md](benchmarks/STAGE2B.md)
+      **15,090 tok/s (15.9× over Stage 2A)**, TTFT 524 → 83 ms, 128 concurrent
+      requests in 512 MB of KV. No TensorRT: hand-written forward pass verified
+      layer-by-layer against HF (rel err ~0.005), paged attention kernel
+      bit-identical under shuffled block placement, preemption with recompute.
+- [x] **vs vLLM 0.11** → [benchmarks/VS_VLLM.md](benchmarks/VS_VLLM.md)
+      Same client, same GPU, same model, two prompt lengths.
+      **10-token prompts: parity** (5,755 vs 5,633 tok/s, TPOT 4.57 vs 5.49 ms).
+      **256-token prompts: vLLM 3.2× throughput, 9.6× TTFT** (1,294 vs 4,182
+      tok/s; 1,172 vs 123 ms). TTFT is linear in prompt length — predicted
+      256 × 4.6 ms = 1.18 s, measured 1.172 s — because prefill runs one token
+      per forward pass. TPOT also crosses over: ahead on dispatch overhead at
+      short context, behind on kernel quality at long context.
+- [ ] **Chunked prefill** — the ~9× TTFT / ~3× throughput fix the benchmark identified
+- [ ] Vectorized loads in `paged_attention.cuh` — close the long-context TPOT gap
 - [ ] Stage 3 — Speculative decoding
-- [ ] Stage 4 — Benchmarks vs vLLM + write-up
 
 ## Quick start
 
