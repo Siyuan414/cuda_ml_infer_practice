@@ -79,10 +79,18 @@ public:
         return (n_tokens + cfg_.block_size - 1) / cfg_.block_size;
     }
 
-    /// May a NEW request of n_tokens be admitted? Must leave the watermark
-    /// intact so already-running sequences can still grow.
-    bool can_admit(int n_tokens) const {
-        return blocks_for(n_tokens) + cfg_.watermark <= num_free();
+    /// May a NEW request be admitted, given that its FIRST step will write
+    /// `first_chunk_tokens`? Under lazy (per-chunk) allocation this is NOT the
+    /// whole prompt — a 2000-token prompt admitted with a 512-token chunk needs
+    /// 32 blocks now, not 125. The rest is allocated as the prompt is consumed,
+    /// which is what lets long prompts start promptly instead of waiting for
+    /// the entire reservation to come free.
+    ///
+    /// The watermark stays reserved so already-running sequences can still grow.
+    /// Pair this with fits_ever(): can_admit answers "room right now", fits_ever
+    /// answers "could this ever fit at all".
+    bool can_admit(int first_chunk_tokens) const {
+        return blocks_for(first_chunk_tokens) <= num_free() - cfg_.watermark;
     }
 
     // ── Per-sequence tables ──────────────────────────────────────────────────
@@ -99,22 +107,7 @@ public:
         return true;
     }
 
-    /// Grow a sequence by one token, where `cur_len` is its length BEFORE the
-    /// append. A new block is needed only when the existing blocks are exactly
-    /// full — at cur_len 16 you hold one full block and need a second; at 17
-    /// the second block still has room.
-    /// Returns false if the pool is empty: the caller must preempt someone.
-    bool append_token(uint64_t seq_id, int cur_len) {
-        auto it = tables_.find(seq_id);
-        if (it == tables_.end()) throw std::runtime_error("no such sequence");
-
-        if (cur_len % cfg_.block_size != 0) return true;   // room in last block
-        if (free_.empty()) return false;                   // caller must preempt
-
-        it->second.push_back(free_.back());
-        free_.pop_back();
-        return true;
-    }
+    
 
     /// Return every block a sequence owns to the pool.
     void release(uint64_t seq_id) {
@@ -173,6 +166,81 @@ public:
         for (const auto& kv : tables_)
             slots += (long long)kv.second.size() * cfg_.block_size;
         return slots ? (double)real / (double)slots : 0.0;
+    }
+
+    // ── Growing a sequence ───────────────────────────────────────────────────
+    /// Blocks a sequence of length `cur_len` must gain to hold `n` more tokens.
+    ///
+    /// NOT ceil(n / block_size): the partially-filled last block absorbs tokens
+    /// for free. At cur_len 20 with 16-token blocks you hold 2 blocks = 32 slots
+    /// with 12 spare, so n = 4 costs ZERO new blocks while ceil(4/16) says 1.
+    /// Differencing blocks_for() is what accounts for that.
+    ///
+    /// Pure arithmetic — usable by the scheduler to size a chunk before the
+    /// sequence exists.
+    int blocks_to_append(int cur_len, int n) const {
+        return blocks_for(cur_len + n) - blocks_for(cur_len);
+    }
+
+    /// As above, but measured against what the sequence ACTUALLY holds rather
+    /// than what cur_len implies. Those differ whenever blocks were reserved
+    /// ahead of use — e.g. a prompt allocated eagerly at admission, then
+    /// consumed token by token. Sizing from the table is correct in both
+    /// regimes; sizing from cur_len alone would re-allocate blocks the sequence
+    /// already owns.
+    int blocks_to_append(uint64_t seq_id, int cur_len, int n) const {
+        const int have = (int)table(seq_id).size();
+        const int want = blocks_for(cur_len + n);
+        return want > have ? want - have : 0;
+    }
+
+    bool can_append(uint64_t seq_id, int cur_len, int n) const {
+        return blocks_to_append(seq_id, cur_len, n) <= num_free();
+    }
+
+    /// Grow a sequence by `n` tokens, where `cur_len` is its length BEFORE the
+    /// append. ALL-OR-NOTHING: if the pool cannot supply every block needed,
+    /// nothing is allocated and false is returned (the caller must preempt).
+    /// A partial append would leave tokens with nowhere to live, and the kernel
+    /// reads -1 from the block table — which Phase 1 turns into -FLT_MAX,
+    /// silently corrupting that sequence instead of failing loudly.
+    bool append_tokens(uint64_t seq_id, int cur_len, int n) {
+        auto it = tables_.find(seq_id);
+        if (it == tables_.end()) throw std::runtime_error("no such sequence");
+
+        const int have = (int)it->second.size();
+        // The table must already cover cur_len. If it doesn't, the caller's
+        // notion of this sequence's length has drifted from the allocator's —
+        // cheapest possible place to catch a scheduler bug, versus discovering
+        // it as garbage logits several layers deep.
+        if (have < blocks_for(cur_len))
+            throw std::runtime_error("append_tokens: table does not cover cur_len");
+
+        const int want = blocks_for(cur_len + n);
+        const int need = want > have ? want - have : 0;
+        if (need > num_free()) return false;
+
+        for (int i = 0; i < need; ++i) {
+            it->second.push_back(free_.back());
+            free_.pop_back();
+        }
+        return true;
+    }
+
+    /// Decode's one-token step is just the n == 1 case.
+    bool append_token(uint64_t seq_id, int cur_len) {
+        return append_tokens(seq_id, cur_len, 1);
+    }
+
+    /// Could a prompt of this size EVER be served, with an empty pool?
+    ///
+    /// Lazy allocation loses the natural guard eager allocation had: an
+    /// oversized prompt is admitted, prefills until blocks run out, is
+    /// preempted, requeued, admitted again — forever, burning the GPU on work
+    /// it throws away. A prompt failing this check is rejected outright (a
+    /// client error), never preempted.
+    bool fits_ever(int n_tokens) const {
+        return blocks_for(n_tokens) <= cfg_.num_blocks - cfg_.watermark;
     }
 
 private:

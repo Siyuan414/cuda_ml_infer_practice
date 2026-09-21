@@ -166,6 +166,91 @@ int main() {
         printf("  2A slots: %.1f%%   (55 tokens in a 512 window)\n", 100.0 * 55 / 512);
     }
 
+    // ── S3.2: multi-token append ────────────────────────────────────────────
+    {
+        printf("append_tokens: the partial last block absorbs tokens free\n");
+        BlockAllocator a;
+        a.configure({16, 100, 0});
+        a.allocate(1, 35);                          // 3 blocks = 48 slots, 13 spare
+        CHECK_EQ(a.table(1).size(), 3u, "35 tokens -> 3 blocks");
+
+        // 35 + 12 = 47 <= 48, so this must cost NOTHING. ceil(12/16) = 1 is the
+        // naive answer and it is wrong.
+        int before = a.num_free();
+        CHECK(a.append_tokens(1, 35, 12), "append 12 tokens succeeds");
+        CHECK_EQ(a.num_free(), before, "12 tokens fit in the partial block: 0 new");
+        CHECK_EQ(a.table(1).size(), 3u, "still 3 blocks");
+
+        // 47 + 2 = 49 > 48, crosses into a fourth block.
+        before = a.num_free();
+        CHECK(a.append_tokens(1, 47, 2), "append 2 more");
+        CHECK_EQ(a.num_free(), before - 1, "crossing the boundary costs 1");
+        CHECK_EQ(a.table(1).size(), 4u, "now 4 blocks");
+    }
+
+    {
+        printf("append_tokens: boundaries and spans\n");
+        BlockAllocator a;
+        a.configure({16, 100, 0});
+
+        a.allocate(1, 0);                           // lazy admission: empty table
+        CHECK_EQ(a.table(1).size(), 0u, "allocate(seq, 0) creates an empty table");
+
+        CHECK(a.append_tokens(1, 0, 236), "append a whole 236-token chunk");
+        CHECK_EQ(a.table(1).size(), 15u, "236 tokens -> 15 blocks");
+
+        a.allocate(2, 16);                          // exactly one full block
+        CHECK_EQ(a.table(2).size(), 1u, "16 tokens -> 1 block");
+        const int before = a.num_free();
+        CHECK(a.append_tokens(2, 16, 16), "append exactly one block's worth");
+        CHECK_EQ(a.num_free(), before - 1, "exact boundary costs exactly 1");
+
+        // 30 + 34 = 64 -> 4 blocks; held 2. So 2, not ceil(34/16) = 3.
+        a.allocate(3, 30);
+        const int b3 = a.num_free();
+        CHECK(a.append_tokens(3, 30, 34), "append 34 onto 30");
+        CHECK_EQ(a.num_free(), b3 - 2, "2 new blocks, not 3");
+    }
+
+    {
+        printf("append_tokens == repeated append_token\n");
+        BlockAllocator bulk, one;
+        bulk.configure({16, 100, 0});
+        one.configure({16, 100, 0});
+        bulk.allocate(1, 0);
+        one.allocate(1, 0);
+
+        bulk.append_tokens(1, 0, 40);
+        for (int i = 0; i < 40; ++i) one.append_token(1, i);
+
+        CHECK(bulk.table(1) == one.table(1), "identical block tables");
+        CHECK_EQ(bulk.num_free(), one.num_free(), "identical pool state");
+    }
+
+    {
+        printf("all-or-nothing on exhaustion\n");
+        BlockAllocator a;
+        a.configure({16, 4, 0});                    // tiny pool: 4 blocks
+        a.allocate(1, 0);
+        const int before = a.num_free();
+
+        CHECK(!a.append_tokens(1, 0, 200), "append beyond the pool fails");
+        CHECK_EQ(a.num_free(), before, "failed append allocated nothing");
+        CHECK_EQ(a.table(1).size(), 0u, "failed append left the table untouched");
+
+        CHECK(a.append_tokens(1, 0, 64), "exactly the whole pool succeeds");
+        CHECK_EQ(a.num_free(), 0, "pool drained");
+    }
+
+    {
+        printf("fits_ever guards against livelock\n");
+        BlockAllocator a;
+        a.configure({16, 10, 2});                   // 10 blocks, watermark 2
+        CHECK(a.fits_ever(128), "128 tokens = 8 blocks <= 10 - 2");
+        CHECK(!a.fits_ever(200), "200 tokens = 13 blocks can never fit");
+        CHECK(!a.fits_ever(160), "160 tokens = 10 blocks exceeds the watermark");
+    }
+
     printf("\n%s\n", failures ? "FAILED" : "all tests passed");
     return failures ? 1 : 0;
 }
