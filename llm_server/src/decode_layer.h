@@ -54,9 +54,18 @@ struct DecodeScratch {
     __half* up     = nullptr;   // [B, inter]
     __half* act    = nullptr;   // [B, inter]      silu(gate)*up
 
-    void alloc(const ModelConfig& cfg, int max_batch) {
-        // TODO: cudaMalloc each, using cfg.hidden_dim, cfg.inter_dim,
-        //       cfg.num_q_heads*cfg.head_dim, cfg.num_kv_heads*cfg.head_dim
+    // Gathered hidden states for the sequences that need logits this step.
+    // Only a prefill chunk's LAST query token predicts anything, so lm_head runs
+    // over n_seqs rows, not max_batch. At vocab 128256 that is the difference
+    // between a 512-row GEMM (262 MB of logits) and a 64-row one.
+    __half* h_last = nullptr;   // [max_seqs, hidden]
+
+    /// `max_batch` is a ROW count: max_batch tokens for decode, or
+    /// max_batched_tokens once chunked prefill is wired up. `max_seqs` sizes
+    /// h_last; 0 means "same as max_batch".
+    void alloc(const ModelConfig& cfg, int max_batch, int max_seqs = 0) {
+        if (max_seqs <= 0) max_seqs = max_batch;
+        cudaMalloc((void**)&h_last, (size_t)max_seqs * cfg.hidden_dim * sizeof(__half));
         cudaMalloc((void**)&h,    max_batch * cfg.hidden_dim * sizeof(__half));
         cudaMalloc((void**)&q,    max_batch * cfg.num_q_heads * cfg.head_dim * sizeof(__half));
         cudaMalloc((void**)&k,    max_batch * cfg.num_kv_heads * cfg.head_dim * sizeof(__half));
@@ -68,6 +77,7 @@ struct DecodeScratch {
         cudaMalloc((void**)&act,  max_batch * cfg.inter_dim * sizeof(__half));
     }
     void free() {
+        cudaFree(h_last);
         cudaFree(h);
         cudaFree(q);
         cudaFree(k);

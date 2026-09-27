@@ -26,8 +26,19 @@ breakdown.
       256 × 4.6 ms = 1.18 s, measured 1.172 s — because prefill runs one token
       per forward pass. TPOT also crosses over: ahead on dispatch overhead at
       short context, behind on kernel quality at long context.
-- [ ] **Chunked prefill** — the ~9× TTFT / ~3× throughput fix the benchmark identified
-- [ ] Vectorized loads in `paged_attention.cuh` — close the long-context TPOT gap
+- [x] **Stage 3** — Chunked prefill → [benchmarks/STAGE3.md](benchmarks/STAGE3.md)
+      **TTFT 1,172 → 240 ms (4.9×), throughput 1,294 → 3,261 tok/s (2.5×)** at
+      256-token prompts. Varlen attention (`q_len >= 1`, mask as a loop bound),
+      multi-token block append, decodes-first token-budget scheduler. Verified by
+      chunk-size invariance: the same prompt in 1 pass and in 3 passes gives
+      token-identical output. Tuned for latency it reaches **96.8 ms TTFT p50,
+      beating vLLM's 123 ms**; throughput across all five scheduler
+      configurations varied only 5%, which localizes the remaining gap to kernel
+      quality rather than policy.
+- [ ] Vectorized loads + query/key tiling in the attention kernel — the measured
+      1.3× throughput gap to vLLM
+- [ ] Stage 4 — Speculative decoding (low-concurrency latency; rides on the
+      varlen kernel)
 - [ ] Stage 3 — Speculative decoding
 
 ## Quick start
@@ -63,6 +74,9 @@ src/   runtime.cpp          Stage 1: single-request TRT runtime
        scheduler.h          request lifecycle + admission policy (no CUDA)
        block_allocator.h    paged blocks, free list, block tables (no CUDA)
        decode_layer.h       Stage 2B: hand-written forward pass, no TensorRT
+       varlen_layer.h       Stage 3: forward pass over a mixed prefill+decode batch
+       chunk_scheduler.h    Stage 3: per-step token budget policy (no CUDA)
+       serve_chunked.cpp    Stage 3: engine loop with chunked prefill
        weights.h            raw fp16 tensor loader
        tokenizer.h          byte-level BPE, LLaMA-3 pre-tokenizer rules
        model_config.h       dimensions from config.json
@@ -73,6 +87,8 @@ kernels/ sampling.cuh       temperature / top-k / top-p on device
          kv_scatter.cuh     fixed-slot KV scatter (Stage 2A)
          layer_kernels.cuh  RMSNorm, RoPE, SiLU-mul, embedding, residual
          paged_attention.cuh  decode attention with block-table indirection
+         paged_attention_varlen.cuh  same, for q_len >= 1 (prefill chunks,
+                              speculative verification); decode is the q_len==1 case
 
 tools/  export_onnx.py, build_engine.py       build the TRT engine
         export_weights.py, dump_reference.py  build the custom decode path

@@ -75,6 +75,17 @@ target_link_libraries(serve CUDA::cudart CUDA::cublas)
 find_package(Threads REQUIRED)
 target_link_libraries(serve Threads::Threads)
 
+# ── serve_chunked: chunked prefill over the varlen kernel (S3.4) ──────────────
+add_executable(serve_chunked
+    src/serve_chunked.cpp
+)
+set_source_files_properties(src/serve_chunked.cpp PROPERTIES LANGUAGE CUDA)
+target_compile_options(serve_chunked PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda>)
+target_include_directories(serve_chunked PRIVATE
+    ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/kernels)
+target_link_libraries(serve_chunked CUDA::cudart CUDA::cublas Threads::Threads)
+
 # Future targets (uncomment as stages progress):
 # add_executable(engine_builder tools/engine_builder.cpp)   # S1.1
 # add_executable(bench tools/bench.cpp)                     # S1.6
