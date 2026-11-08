@@ -14,6 +14,6 @@ with torch.no_grad():
 input_data.numpy().astype(np.float32).tofile('resnet18_input.bin')
 output.numpy().astype(np.float32).tofile('resnet18_output.bin')
 
-print(f"Input  shape : {input_data.shape}  -> test_input.bin")
-print(f"Output shape : {output.shape} -> test_output_ref.bin")
+print(f"Input  shape : {input_data.shape}  -> resnet18_input.bin")
+print(f"Output shape : {output.shape} -> resnet18_output.bin")
 print(f"Predicted class (PyTorch): {output.argmax().item()}")

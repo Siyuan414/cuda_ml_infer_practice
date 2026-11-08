@@ -6,7 +6,7 @@
 using namespace std;
 int main(int argc, char* argv[])
 {
-    const std::string path = (argc > 1) ? argv[1] : "resnet18.onnx";
+    const std::string path = (argc > 1) ? argv[1] : "llama_attn_dead.onnx";
 
     // 1. Read file into string
     ifstream f(path,ios::in | ios::binary);

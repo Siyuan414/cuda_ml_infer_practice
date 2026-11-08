@@ -98,7 +98,7 @@ private:
 
 // ── main ──────────────────────────────────────────────────────────────────────
 int main(int argc, char* argv[]) {
-    const std::string path = (argc > 1) ? argv[1] : "resnet18.onnx";
+    const std::string path = (argc > 1) ? argv[1] : "llama_attn_dead.onnx";
 
     std::ifstream f(path, std::ios::binary);
     if (!f) { std::cerr << "Cannot open: " << path << "\n"; return 1; }
